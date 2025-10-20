@@ -18,4 +18,8 @@ public class EcsCicdApplication {
 		return "Welcome to the ecs application";
 	}
 
+	@GetMapping("/test")
+	public String test(){
+		return "This end point is deployed using cicd";
+	}
 }
