@@ -1,45 +1,38 @@
 version: 0.2
 
-env:
-  variables:
-    AWS_REGION: "ap-south-1"
-    ACCOUNT_ID: "131234315774"
-    ECR_REPO_NAME: "ecs-cicd"
-    DOCKER_CONTAINER_NAME: "ecs-cicd"
-
 phases:
   pre_build:
     commands:
-      - echo "Starting pre-build phase..."
-      - echo "Running Maven build..."
-      - mvn clean package -DskipTests
-      - echo "Logging in to Amazon ECR..."
+      - mvn clean install
+      - echo Logging in to Amazon ECR...
       - aws --version
-      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-      - echo "Setting commit hash and image tag..."
+      - REPOSITORY_URI=131234315774.dkr.ecr.ap-south-1.amazonaws.com/ecs-cicd
+      - aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 131234315774.dkr.ecr.ap-south-1.amazonaws.com
       - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
-      - IMAGE_TAG=build-$(echo $CODEBUILD_BUILD_ID | awk -F ":" '{print $2}')
-      - echo "Commit hash: $COMMIT_HASH, Image tag: $IMAGE_TAG"
-
+      - IMAGE_TAG=build-$(echo $CODEBUILD_BUILD_ID | awk -F":" '{print $2}')
   build:
     commands:
-      - echo "Starting build phase..."
-      - echo "Building Docker image..."
-      - docker build -t ${ECR_REPO_NAME}:latest .
-      - docker tag ${ECR_REPO_NAME}:latest ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:latest
-      - docker tag ${ECR_REPO_NAME}:latest ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
-
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - docker build -t $REPOSITORY_URI:latest .
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
   post_build:
     commands:
-      - echo "Starting post-build phase..."
-      - echo "Pushing Docker images to ECR..."
-      - docker push ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:latest
-      - docker push ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
-      - echo "Creating imagedefinitions.json for ECS deployment..."
-      - printf '[{"name":"%s","imageUri":"%s"}]' ${DOCKER_CONTAINER_NAME} ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG} > imagedefinitions.json
-      - echo "Image definitions file content:"
+      - echo Build completed on `date`
+      - echo Pushing the Docker images...
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - echo Writing image definitions file...
+      - printf '[{"name":"course-service","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+      - echo Writing image definitions file...
+      # add your container name
+      - DOCKER_CONTAINER_NAME=ecs-cicd
+      - printf '[{"name":"%s","imageUri":"%s"}]' $DOCKER_CONTAINER_NAME $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+      - echo $DOCKER_CONTAINER_NAME
+      - echo printing imagedefinitions.json
       - cat imagedefinitions.json
 
 artifacts:
   files:
     - imagedefinitions.json
+    - target/course-service.jar
